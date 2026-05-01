@@ -1,0 +1,69 @@
+============================================================
+E-COMMERCE SALES ANALYSIS - BUSINESS INSIGHTS REPORT
+============================================================
+
+SALES PERFORMANCE
+----------------------------------------
+Total Revenue: $2,341,383.34
+Total Orders: 3,000
+Average Order Value: $780.46
+
+Top 5 Product Categories by Revenue:
+  - health: $222,544.66
+  - sports: $176,256.98
+  - home_furniture: $172,123.83
+  - baby: $168,524.81
+  - electronics: $168,058.51
+
+CUSTOMER ANALYSIS
+----------------------------------------
+Unique Customers: 953
+Repeat Customers: 801
+New Customers: 152
+Customer Repeat Rate: 84.1%
+
+Top 5 States by Revenue:
+  - SC: $260,187.90
+  - SP: $257,764.62
+  - MG: $255,772.91
+  - RJ: $254,521.43
+  - PR: $235,359.99
+
+PRODUCT PERFORMANCE
+----------------------------------------
+Top 5 Categories by Units Sold:
+  - health: 866 units
+  - sports: 692 units
+  - home_furniture: 681 units
+  - electronics: 668 units
+  - baby: 660 units
+
+DELIVERY PERFORMANCE
+----------------------------------------
+Average Delivery Time: 14.9 days
+Median Delivery Time: 15.0 days
+Delay Rate: 46.8%
+Delivery-Review Correlation: 0.000 (Weak correlation - delivery time has minimal impact on reviews)
+
+PAYMENT ANALYSIS
+----------------------------------------
+Payment Method Distribution:
+  - credit_card: 49.7%
+  - boleto: 16.9%
+  - debit_card: 16.7%
+  - voucher: 16.7%
+
+Average Installments: 3.7
+Orders Using Installments: 70.0%
+
+KEY RECOMMENDATIONS
+----------------------------------------
+1. Focus on top-performing categories for inventory optimization
+2. Investigate delivery delays to improve customer satisfaction
+3. Consider promotional campaigns for low-performing regions
+4. Optimize payment options based on customer preferences
+5. Implement loyalty programs to increase repeat customer rate
+
+============================================================
+End of Report
+============================================================
