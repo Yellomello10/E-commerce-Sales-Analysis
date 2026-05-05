@@ -36,7 +36,7 @@ def perform_cohort_analysis(df: pd.DataFrame) -> Dict[str, Any]:
         return result
 
     df = df.copy()
-    df = df.dropna(subset=['customer_purchase_timestamp', 'customer_id'])
+    df = df.dropna(subset=['order_purchase_timestamp', 'customer_id'])
 
     if len(df) == 0:
         return result

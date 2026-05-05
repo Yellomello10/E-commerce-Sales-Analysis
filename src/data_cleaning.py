@@ -13,21 +13,32 @@ def load_data(data_dir: str) -> dict:
     """
     Load all CSV datasets from the specified directory.
 
+    Supports the full Olist Brazilian E-Commerce dataset downloaded from Kaggle
+    (olistbr/brazilian-ecommerce) which contains 9 CSV files.
+
     Args:
         data_dir: Path to directory containing CSV files
 
     Returns:
         Dictionary with DataFrames for each dataset
     """
+    # Core datasets (filenames exactly as shipped by Kaggle)
     datasets = {
         'orders': 'olist_orders_dataset.csv',
         'customers': 'olist_customers_dataset.csv',
         'order_items': 'olist_order_items_dataset.csv',
         'payments': 'olist_order_payments_dataset.csv',
+        'reviews': 'olist_order_reviews_dataset.csv',
         'products': 'olist_products_dataset.csv',
         'sellers': 'olist_sellers_dataset.csv',
-        'category_translation': 'olist_products_category_name_translation.csv'
+        'geolocation': 'olist_geolocation_dataset.csv',
     }
+
+    # The translation file has two possible names – try both
+    _translation_candidates = [
+        'product_category_name_translation.csv',          # Kaggle canonical name
+        'olist_products_category_name_translation.csv',   # Legacy / sample-data name
+    ]
 
     loaded_data = {}
 
@@ -39,6 +50,18 @@ def load_data(data_dir: str) -> dict:
         else:
             print(f"Warning: {filename} not found at {filepath}")
             loaded_data[name] = None
+
+    # Resolve translation file
+    translation_df = None
+    for candidate in _translation_candidates:
+        filepath = os.path.join(data_dir, candidate)
+        if os.path.exists(filepath):
+            translation_df = pd.read_csv(filepath)
+            print(f"Loaded category_translation ({candidate}): {translation_df.shape}")
+            break
+    if translation_df is None:
+        print("Warning: category translation file not found (tried both name variants)")
+    loaded_data['category_translation'] = translation_df
 
     return loaded_data
 
@@ -71,6 +94,10 @@ def clean_data(data: dict) -> dict:
     if data['payments'] is not None:
         cleaned['payments'] = clean_payments(data['payments'])
 
+    # Clean reviews dataset
+    if data.get('reviews') is not None:
+        cleaned['reviews'] = clean_reviews(data['reviews'])
+
     # Clean products dataset
     if data['products'] is not None:
         cleaned['products'] = clean_products(data['products'])
@@ -78,6 +105,10 @@ def clean_data(data: dict) -> dict:
     # Clean sellers dataset
     if data['sellers'] is not None:
         cleaned['sellers'] = clean_sellers(data['sellers'])
+
+    # Clean geolocation dataset
+    if data.get('geolocation') is not None:
+        cleaned['geolocation'] = clean_geolocation(data['geolocation'])
 
     # Clean category translation
     if data['category_translation'] is not None:
@@ -180,12 +211,61 @@ def clean_sellers(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_reviews(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean order reviews dataset."""
+    df = df.copy()
+
+    # Convert date columns
+    for col in ['review_creation_date', 'review_answer_timestamp']:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+
+    # Ensure review_score is numeric and in range 1-5
+    if 'review_score' in df.columns:
+        df['review_score'] = pd.to_numeric(df['review_score'], errors='coerce')
+        df = df[df['review_score'].between(1, 5, inclusive='both')]
+
+    # Drop duplicates keeping the latest review per order
+    if 'review_answer_timestamp' in df.columns:
+        df = df.sort_values('review_answer_timestamp', ascending=False)
+    df = df.drop_duplicates(subset=['order_id'])
+
+    return df
+
+
+def clean_geolocation(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean geolocation dataset – deduplicate zip prefixes by taking the median lat/lng."""
+    df = df.copy()
+
+    for col in ['geolocation_lat', 'geolocation_lng']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Keep one representative coordinate per zip prefix
+    if 'geolocation_zip_code_prefix' in df.columns:
+        df = (
+            df.groupby('geolocation_zip_code_prefix', as_index=False)
+            .agg({
+                'geolocation_lat': 'median',
+                'geolocation_lng': 'median',
+                'geolocation_city': 'first',
+                'geolocation_state': 'first',
+            })
+        )
+
+    return df
+
+
 def merge_data(cleaned: dict) -> pd.DataFrame:
     """
-    Merge all cleaned datasets into a single DataFrame.
+    Merge all cleaned datasets into a single analytical DataFrame.
+
+    Join order, the full Kaggle dataset (9 tables) into one flat table
+    suitable for analysis.  Geolocation is kept as a separate lookup and
+    is NOT merged into the main frame to avoid an explosion of rows.
 
     Args:
-        cleaned: Dictionary of cleaned DataFrames
+        cleaned: Dictionary of cleaned DataFrames from clean_data()
 
     Returns:
         Merged DataFrame with all data combined
@@ -205,6 +285,19 @@ def merge_data(cleaned: dict) -> pd.DataFrame:
     if 'payments' in cleaned and cleaned['payments'] is not None:
         df = df.merge(cleaned['payments'], on='order_id', how='left')
 
+    # Merge with reviews (one review per order after dedup)
+    if 'reviews' in cleaned and cleaned['reviews'] is not None:
+        review_cols = ['order_id', 'review_score']
+        if 'review_comment_title' in cleaned['reviews'].columns:
+            review_cols.append('review_comment_title')
+        if 'review_comment_message' in cleaned['reviews'].columns:
+            review_cols.append('review_comment_message')
+        df = df.merge(
+            cleaned['reviews'][review_cols],
+            on='order_id',
+            how='left'
+        )
+
     # Merge with products
     if 'products' in cleaned and cleaned['products'] is not None:
         df = df.merge(cleaned['products'], on='product_id', how='left')
@@ -215,10 +308,16 @@ def merge_data(cleaned: dict) -> pd.DataFrame:
 
     # Merge with category translation
     if 'category_translation' in cleaned and cleaned['category_translation'] is not None:
+        trans = cleaned['category_translation']
+        # Support both column naming conventions
+        if 'product_category_name_english' in trans.columns:
+            merge_col = 'product_category_name_english'
+        else:
+            merge_col = trans.columns[-1]  # fallback: last column
         df = df.merge(
-            cleaned['category_translation'],
+            trans,
             left_on='product_category_name',
-            right_on='product_category_name_english',
+            right_on=merge_col,
             how='left',
             suffixes=('', '_translated')
         )
